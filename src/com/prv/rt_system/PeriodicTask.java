@@ -1,11 +1,28 @@
 package com.prv.rt_system;
 
-
-// Periodic task abstraction with drift correction 
+// Periodic task abstraction with drift correction and priorities
 public class PeriodicTask extends Thread {
-    public PeriodicTask(long periodMs, Runnable task) {
+
+    private final long periodNs;
+    private final Runnable task;
+    private volatile boolean running = true;
+    private long maxExecTime = 0;
+
+    public PeriodicTask(long periodMs, Runnable task, int priority) {
         this.periodNs = periodMs * 1_000_000L; // convert ms to ns
         this.task = task;
+
+        // Clamp priority to valid Java range [Thread.MIN_PRIORITY, Thread.MAX_PRIORITY]
+        if (priority < Thread.MIN_PRIORITY) {
+            priority = Thread.MIN_PRIORITY;
+        } else if (priority > Thread.MAX_PRIORITY) {
+            priority = Thread.MAX_PRIORITY;
+        }
+        setPriority(priority); 
+    }
+
+    public double getMaxExecTimeMs() {
+        return maxExecTime / 1_000_000.0;
     }
 
     @Override
@@ -14,7 +31,12 @@ public class PeriodicTask extends Thread {
 
         while (running) {
             // 1. Execute task
+            long start = System.nanoTime();
             task.run();
+            long duration = System.nanoTime() - start;
+            if (duration > maxExecTime) {
+                maxExecTime = duration;
+            }
 
             // 2. Compute next release time
             nextRelease += periodNs;
@@ -28,8 +50,9 @@ public class PeriodicTask extends Thread {
                     break;
                 }
             } else {
-                System.out.println("Deadline miss!");
-                nextRelease = System.nanoTime(); // reset periodic activation
+                // deadline miss, reset periodic activation
+            	// System.out.print("Deadline miss\n");
+                nextRelease = System.nanoTime();
             }
         }
     }
@@ -38,8 +61,4 @@ public class PeriodicTask extends Thread {
         running = false;
         this.interrupt();
     }
-    
-    private final long periodNs;
-    private final Runnable task;
-    private volatile boolean running = true;
 }

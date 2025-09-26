@@ -181,8 +181,10 @@ public class EnvGUI {
     
     /** Log a plain message (thread-safe). */
     public void log(String message) {
-        SwingUtilities.invokeLater(() -> {
-            logArea.append(message + "\n");
+    	float t_s = EnvironmentState.getInstance().getTimeMs() / 1000;
+    	
+    	SwingUtilities.invokeLater(() -> {
+            logArea.append(String.format("t: %5.2f s - ", t_s) + message + "\n");
             logArea.setCaretPosition(logArea.getDocument().getLength()); // auto-scroll
         });
     }
@@ -224,7 +226,7 @@ public class EnvGUI {
                     sb.append("⚠ ").append(alarm).append("\n");
                 }
                 alarmListArea.setText(sb.toString());
-                alarmListArea.setBackground(Color.BLACK);
+                alarmListArea.setBackground(Color.YELLOW);
                 alarmListArea.setForeground(Color.RED);
             }
         });

@@ -3,14 +3,11 @@ package com.prv.rt_system;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.prv.EnvConfig;
 import com.prv.EnvironmentState;
 import com.prv.rt_system.ADC.ADCStatus;
 
 public class ControlSystem extends Thread {
-	public static float CO_CONCENTRATION_LIMIT = 1.0f;
-	public static float CH4_CONCENTRATION_LIMIT = 1.0f;
-	public static float AIR_FLOW_LIMIT = 0.1f;
-	
 	
 	public static int READER_TASK_PERIOD_MS = 150;
 	
@@ -45,23 +42,23 @@ public class ControlSystem extends Thread {
         System.out.println("Control system started");
         
         // sensor initialization
-        PeriodicTask coReader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.coReaderTask());
+        PeriodicTask coReader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.coReaderTask(), 2);
         MCU.instance.adc1_co.startConversion();
         coReader.start();
         
-        PeriodicTask ch4Reader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.ch4ReaderTask());
+        PeriodicTask ch4Reader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.ch4ReaderTask(), 4);
         MCU.instance.adc2_ch4.startConversion();
         ch4Reader.start();
         
-        PeriodicTask airFlowReader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.airFlowReaderTask());
+        PeriodicTask airFlowReader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.airFlowReaderTask(), 3);
         MCU.instance.adc3_af.startConversion();
         airFlowReader.start();
         
-        PeriodicTask waterFlowReader = new PeriodicTask(READER_TASK_PERIOD_MS, this::pumpWaterFlowReaderTask);
+        PeriodicTask waterFlowReader = new PeriodicTask(READER_TASK_PERIOD_MS, this::pumpWaterFlowReaderTask, 5);
         MCU.instance.adc4_wf.startConversion();
         waterFlowReader.start();
         
-        PeriodicTask loggerTask = new PeriodicTask(1100, this::loggerTask);
+        PeriodicTask loggerTask = new PeriodicTask(1000, this::loggerTask, 1);
         loggerTask.start();
        
         
@@ -76,6 +73,24 @@ public class ControlSystem extends Thread {
                 break;
             }
         }
+        
+        coReader.interrupt();
+        ch4Reader.interrupt();
+        airFlowReader.interrupt();
+        waterFlowReader.interrupt();
+        loggerTask.interrupt();
+        
+        double pumpCtrlWCET = pumpControlSubSys.pumpController.getMaxExecTimeMs();
+        double pumpMotiorWCET = pumpControlSubSys.waterFlowMonitor.getMaxExecTimeMs();
+        
+
+        System.out.printf("coReader max_exec_time:%f\n", coReader.getMaxExecTimeMs());
+        System.out.printf("ch4Reader max_exec_time:%f\n", ch4Reader.getMaxExecTimeMs());
+        System.out.printf("airFlowReader max_exec_time:%f\n", airFlowReader.getMaxExecTimeMs());
+        System.out.printf("waterFlowReader max_exec_time:%f\n", waterFlowReader.getMaxExecTimeMs());
+        System.out.printf("loggerTask max_exec_time:%f\n", loggerTask.getMaxExecTimeMs());
+        System.out.printf("pumpController max_exec_time:%f\n", pumpCtrlWCET);
+        System.out.printf("waterFlowMonitor max_exec_time:%f\n", pumpMotiorWCET);
         
         System.out.println("Control system stopped");
     }
@@ -95,6 +110,15 @@ public class ControlSystem extends Thread {
     // ALARMS MANAGING
     
     private final Set<AlarmType> activeAlarms = new HashSet<>();
+
+	public void EXTIWaterLevelHigh() {
+		if (this.pumpControlSubSys != null)
+			this.pumpControlSubSys.setwaterLevelHighFlag();
+	}
+	public void EXTIWaterLevelLow() {
+		if (this.pumpControlSubSys != null)
+			this.pumpControlSubSys.setwaterLevelLowFlag();
+	}
     
  // Raise (or re-raise) an alarm
     public void soundAnAlarm(AlarmType type) {
@@ -120,21 +144,27 @@ public class ControlSystem extends Thread {
     	this.pumpControlSubSys.setManualControl(pumpOn);
     }
     
-    private ADCStatus prevCoReaderStatus = ADCStatus.DATA_READY;
+    private volatile ADCStatus prevCoReaderStatus = ADCStatus.DATA_READY;
     public void coReaderTask() {
     	ADCStatus adc_status = MCU.instance.adc1_co.getStatus();
-    	if (adc_status != ADCStatus.DATA_READY) {
+
+		if (adc_status != ADCStatus.DATA_READY) {
+    		
     		if (prevCoReaderStatus != ADCStatus.DATA_READY) {
         		// two malfunctions in a row -> sound an alarm
-    			this.soundAnAlarm(AlarmType.CO_SENSOR_FAULT);
+
+        		this.soundAnAlarm(AlarmType.CO_SENSOR_FAULT);
     		}
     	}
     	else {
-    		this.coConcentration = MCU.instance.adc1_co.getValue();
+			this.clearAlarm(AlarmType.CO_SENSOR_FAULT);
     		
-    		if (this.coConcentration > ControlSystem.CO_CONCENTRATION_LIMIT) {
+			this.coConcentration = MCU.instance.adc1_co.getValue();
+    		
+    		if (this.coConcentration > EnvConfig.CO_CONCENTRATION_LIMIT) {
     			this.soundAnAlarm(AlarmType.CO_CONCENTRATION_TOO_HIGH);
     		}
+    		else this.clearAlarm(AlarmType.CO_CONCENTRATION_TOO_HIGH);
     	}
     	
     	prevCoReaderStatus = adc_status;
@@ -153,13 +183,17 @@ public class ControlSystem extends Thread {
     		}
     	}
     	else {
+			this.clearAlarm(AlarmType.CH4_SENSOR_FAULT);
+			
     		this.ch4Concentration = MCU.instance.adc2_ch4.getValue();
-    		if (this.ch4Concentration > ControlSystem.CH4_CONCENTRATION_LIMIT) {
+    		if (this.ch4Concentration > EnvConfig.CH4_CONCENTRATION_LIMIT) {
+    			// two malfunctions in a row -> sound an alarm
     			this.soundAnAlarm(AlarmType.CH4_CONCENTRATION_TOO_HIGH);
     		}
+    		else this.clearAlarm(AlarmType.CH4_CONCENTRATION_TOO_HIGH);
     	}
     	
-    	prevCoReaderStatus = adc_status;
+    	prevCh4ReaderStatus = adc_status;
     	
     	// period displacement
     	MCU.instance.adc2_ch4.startConversion();
@@ -175,12 +209,15 @@ public class ControlSystem extends Thread {
     		}
     	}
     	else {
+			this.clearAlarm(AlarmType.AIR_FLOW_SENSOR_FAULT);
+			
     		this.airFlow = MCU.instance.adc3_af.getValue();
-    		if (this.airFlow < ControlSystem.AIR_FLOW_LIMIT) {
+    		if (this.airFlow < EnvConfig.AIR_FLOW_LIMIT) {
     			this.soundAnAlarm(AlarmType.AIR_FLOW_TOO_LOW);
     		}
+    		else this.clearAlarm(AlarmType.AIR_FLOW_TOO_LOW);
     	}
-    	prevCoReaderStatus = adc_status;
+    	prevAirFlowReaderStatus = adc_status;
     	
     	// period displacement
     	MCU.instance.adc3_af.startConversion();
@@ -191,13 +228,15 @@ public class ControlSystem extends Thread {
     	ADCStatus adc_status = MCU.instance.adc4_wf.getStatus();
     	if (adc_status != ADCStatus.DATA_READY) {
     		if (prevWaterFlowReaderStatus != ADCStatus.DATA_READY) {
-        		// two malfunctions in a row -> sound an alarm
+    			this.soundAnAlarm(AlarmType.WATER_FLOW_SENSOR_FAULT);
     		}
     	}
     	else {
+    		this.clearAlarm(AlarmType.WATER_FLOW_SENSOR_FAULT);
+    		
     		this.waterFlow = MCU.instance.adc4_wf.getValue();
     	}
-    	prevCoReaderStatus = adc_status;
+    	prevWaterFlowReaderStatus = adc_status;
     	
     	// period displacement
     	MCU.instance.adc4_wf.startConversion();

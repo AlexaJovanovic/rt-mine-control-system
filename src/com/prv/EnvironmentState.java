@@ -1,6 +1,6 @@
 package com.prv;
 
-import com.prv.rt_system.MCU;
+import com.prv.rt_system.ControlSystem;
 
 public class EnvironmentState {
     private static EnvironmentState instance;   // singleton instance
@@ -12,6 +12,7 @@ public class EnvironmentState {
     private float spontanetusWaterFlow;
     private volatile float pumpWaterFlow = 0f;
     private float waterLevel;
+    private ControlSystem controlSystem;
     
     private float timePassed_ms = 0f;
     
@@ -19,6 +20,10 @@ public class EnvironmentState {
     private boolean pumpWorkingProperly = true;
 
     // getters
+    public float getTimeMs() {
+        return timePassed_ms;
+    }
+
     public float getCoConcentration() {
         return coConcentration;
     }
@@ -66,12 +71,13 @@ public class EnvironmentState {
     }
     
     // private constructor
-    private EnvironmentState(float CO, float CH4, float air, float extWater, float level) {
+    private EnvironmentState(float CO, float CH4, float air, float extWater, float level, ControlSystem ctrlSys) {
         this.coConcentration = CO;
         this.ch4Concentration = CH4;
         this.airFlow = air;
         this.spontanetusWaterFlow = extWater;
         this.waterLevel = level;
+        this.controlSystem = ctrlSys;
     }
 
     // Singleton getter
@@ -83,9 +89,9 @@ public class EnvironmentState {
     }
 
     // Initialization method
-    public static void initialize() {
+    public static void initialize(ControlSystem controlSystem) {
         if (instance == null) {
-            instance = new EnvironmentState(EnvConfig.INITIAL_CO_CONCENTRATION, EnvConfig.INITIAL_CH4_CONCENTRATION, EnvConfig.INITIAL_AIR_FLOW, EnvConfig.WATER_FILLING_RATE, EnvConfig.HIGH_WATER_LEVEL);
+            instance = new EnvironmentState(EnvConfig.INITIAL_CO_CONCENTRATION, EnvConfig.INITIAL_CH4_CONCENTRATION, EnvConfig.INITIAL_AIR_FLOW, EnvConfig.WATER_FILLING_RATE, EnvConfig.HIGH_WATER_LEVEL, controlSystem);
         }
     }
 
@@ -98,16 +104,15 @@ public class EnvironmentState {
         
         waterLevel += (totalWaterFlow) * dt_ms * 0.001;
         if (waterLevel > 100) waterLevel = 100;
+        if (waterLevel < 0) waterLevel = 0;
         
-        // System.out.printf("%f %f\n", totalWaterFlow, pumpWaterFlow);
-        
+        airFlow = EnvConfig.airFlowFunction(timePassed_ms);
         coConcentration = EnvConfig.coConcentrationFunction(timePassed_ms);
         ch4Concentration = EnvConfig.ch4ConcentrationFunction(timePassed_ms);
 
-        if (waterLevel < 0) waterLevel = 0;
         
-        if (waterLevel >= EnvConfig.HIGH_WATER_LEVEL) MCU.instance.EXTIWaterLevelHigh();
-        if (waterLevel <= EnvConfig.LOW_WATER_LEVEL) MCU.instance.EXTIWaterLevelLow();
+        if (waterLevel >= EnvConfig.HIGH_WATER_LEVEL) this.controlSystem.EXTIWaterLevelHigh();
+        if (waterLevel <= EnvConfig.LOW_WATER_LEVEL) this.controlSystem.EXTIWaterLevelLow();
     }
 
     @Override

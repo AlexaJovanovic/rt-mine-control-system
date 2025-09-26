@@ -1,5 +1,6 @@
 package com.prv.rt_system;
 
+import com.prv.EnvConfig;
 import com.prv.EnvironmentState;
 import com.prv.rt_system.ControlSystem.AlarmType;
 
@@ -7,12 +8,15 @@ public class PumpControlSubSys {
 	private ControlSystem controlSystem;
 	private EnvGUI gui;
 	
+	public PeriodicTask pumpController;
+	public PeriodicTask waterFlowMonitor;
+	
 	PumpControlSubSys(ControlSystem ctrlSys, EnvGUI envGUI) {
 		this.controlSystem = ctrlSys;
 		this.gui = envGUI;
 		
-		PeriodicTask pumpController = new PeriodicTask(100, this::pumpControllerTask);
-		PeriodicTask waterFlowMonitor = new PeriodicTask(100, this::pumpWaterFlowMonitorTask);
+		pumpController = new PeriodicTask(140, this::pumpControllerTask, 6);
+		waterFlowMonitor = new PeriodicTask(140, this::pumpWaterFlowMonitorTask, 7);
 		
 		pumpController.start();
 		waterFlowMonitor.start();
@@ -23,18 +27,28 @@ public class PumpControlSubSys {
     private volatile boolean operatorSignalOn = false;
     private volatile boolean operatorSignalOff = false;
 
-    private boolean waterLevelHigh = false;
-    private boolean waterLevelLow = false;
+    private boolean waterLevelHighFlag = false;
+    private boolean waterLevelLowFlag = false;
     
     public void setManualControl(boolean pump_on) {
     	operatorSignalOn = pump_on;
     	operatorSignalOff = !pump_on;
     }
     
+    public void setwaterLevelHighFlag() {
+    	waterLevelHighFlag = true;
+    }
+    public void setwaterLevelLowFlag() {
+    	waterLevelLowFlag = true;
+    }
+    
 	public void pumpControllerTask() {
 		// pump should never run if CH4 concentration is to high
-		if (controlSystem.getCH4Concentration() > ControlSystem.CH4_CONCENTRATION_LIMIT && pumpIsOn) {
-    		this.turnPumpOff();
+		if (controlSystem.getCH4Concentration() > EnvConfig.CH4_CONCENTRATION_LIMIT) {
+    		if (this.pumpIsOn) {
+    			this.turnPumpOff();
+        		gui.log("PUMP OFF - CH4 CONCENTRATION TOO HIGH");
+    		}
     		return;
     	}
     	
@@ -52,17 +66,26 @@ public class PumpControlSubSys {
     		gui.log("PUMP OFF - OPERATOR SIGNAL");
     	}
 		
-    	if (waterLevelHigh) {
-    		this.turnPumpOn();
-
-    		gui.log("PUMP OFF - WATER LEVEL HIGH");
+    	if (waterLevelHighFlag) {
+    		waterLevelHighFlag = false;
+    		
+    		if (!pumpIsOn) {
+    			this.turnPumpOn();
+    			gui.log("PUMP ON - WATER LEVEL HIGH");
+    		}
     	}
-    	if (waterLevelLow) {
-    		this.turnPumpOff();
-
-    		gui.log("PUMP OFF - WATER LEVEL LOW");
+    	if (waterLevelLowFlag) {
+    		waterLevelLowFlag = false;
+    		
+    		if (pumpIsOn) {
+    			this.turnPumpOff();
+    			gui.log("PUMP OFF - WATER LEVEL LOW");
+    		}
     	}
+    	
+    	EnvironmentState.getInstance().setPumpIsOn(this.pumpIsOn);
     }
+	
 	
     // helper
     public void turnPumpOn() {
@@ -77,16 +100,17 @@ public class PumpControlSubSys {
     }
     
 	int N = 0;
+	final int periodsToWait = 9;
     public void pumpWaterFlowMonitorTask() {
     	float measuredFlow = this.controlSystem.getPumpWaterFlow();
     	
     	if (pumpIsOn && measuredFlow >= 0) { // pump on but no water
         	N++;
-    		if (N >= 3) controlSystem.soundAnAlarm(AlarmType.PUMP_ON_NO_FLOW);
+    		if (N >= periodsToWait) controlSystem.soundAnAlarm(AlarmType.PUMP_ON_NO_FLOW);
         } 
         else if (!pumpIsOn && measuredFlow < 0) { // pump off but water is flowing
         	N++;
-    		if (N >= 3) controlSystem.soundAnAlarm(AlarmType.PUMP_OFF_FLOW);
+    		if (N >= periodsToWait) controlSystem.soundAnAlarm(AlarmType.PUMP_OFF_FLOW);
         }
         else {
         	// everything is in regular state

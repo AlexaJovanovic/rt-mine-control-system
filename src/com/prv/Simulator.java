@@ -14,13 +14,13 @@ public class Simulator {
 
     public static void main(String[] args) throws InterruptedException, InvocationTargetException {
     	
-    	EnvironmentState.initialize();
-    	PeriodicTask envUpdateTask = new PeriodicTask(ENVIROMENT_UPDATE_PERIOD_MS, ()-> EnvironmentState.getInstance().update(ENVIROMENT_UPDATE_PERIOD_MS));
-    	envUpdateTask.start();
-
         
     	ControlSystem controlSystem = new ControlSystem();
     	
+    	EnvironmentState.initialize(controlSystem);
+    	PeriodicTask envUpdateTask = new PeriodicTask(ENVIROMENT_UPDATE_PERIOD_MS, ()-> EnvironmentState.getInstance().update(ENVIROMENT_UPDATE_PERIOD_MS), 8);
+    	envUpdateTask.start();
+
     	
         // Create GUI on EDT
         final EnvGUI[] guiHolder = new EnvGUI[1];
@@ -43,9 +43,21 @@ public class Simulator {
         controlSystem.setGui(gui);
         controlSystem.start();
         
-    	controlSystem.join();
+        // Wait max 20s for it to finish
+        //controlSystem.join();
+        controlSystem.join(50_000);
+
+        // If still running after 20s, stop it
+        if (controlSystem.isAlive()) {
+            controlSystem.interrupt();   // or controlSystem.shutdown() if you implemented it
+        }
     	
+        controlSystem.join();
+        
     	envUpdateTask.interrupt();
+    	
+    	System.out.printf("coReader max_exec_time:%f\n", envUpdateTask.getMaxExecTimeMs());
+        
     }
 
 	
