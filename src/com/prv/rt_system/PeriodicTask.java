@@ -51,7 +51,6 @@ public class PeriodicTask extends Thread {
                 }
             } else {
                 // deadline miss, reset periodic activation
-            	// System.out.print("Deadline miss\n");
                 nextRelease = System.nanoTime();
             }
         }

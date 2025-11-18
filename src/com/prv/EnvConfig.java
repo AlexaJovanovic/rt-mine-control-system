@@ -1,5 +1,7 @@
 package com.prv;
 
+
+// State class that encapsulates configuration parameters for the environment simulation
 public final class EnvConfig {
 	
     // Gas concentrations (percentages)
@@ -22,9 +24,9 @@ public final class EnvConfig {
     public static final float PUMP_WATER_FLOW = -3.0f;
 
     
-    // defining mathematical functions that will define signal values in time
+    // defining mathematical functions that will cleanly define signal values in time
     public static float coConcentrationFunction(float time_ms) {
-    	if (time_ms < 0) return 0;
+    	if (time_ms < 0) return INITIAL_CO_CONCENTRATION;
     	
     	if (time_ms < 2000) return 0.01f;
     	if (time_ms < 8000) return 1.2f;
@@ -37,7 +39,7 @@ public final class EnvConfig {
     }
     
     public static float airFlowFunction(float time_ms) {
-    	if (time_ms < 0) return 0;
+    	if (time_ms < 0) return INITIAL_AIR_FLOW;
     	
     	return (float) Math.sin(time_ms/2000) +  1.0f;
     }

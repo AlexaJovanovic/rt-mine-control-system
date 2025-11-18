@@ -2,6 +2,7 @@ package com.prv;
 
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.SwingUtilities;
 
@@ -12,22 +13,25 @@ import com.prv.rt_system.EnvGUI;
 public class Simulator {
 	public static final int ENVIROMENT_UPDATE_PERIOD_MS = 10;
 
-    public static void main(String[] args) throws InterruptedException, InvocationTargetException {
-    	
-        
+    public static void main(String[] args) throws InterruptedException, InvocationTargetException { 	
     	ControlSystem controlSystem = new ControlSystem();
     	
     	EnvironmentState.initialize(controlSystem);
+    	
+    	// Start environment updater thread
     	PeriodicTask envUpdateTask = new PeriodicTask(ENVIROMENT_UPDATE_PERIOD_MS, ()-> EnvironmentState.getInstance().update(ENVIROMENT_UPDATE_PERIOD_MS), 8);
     	envUpdateTask.start();
 
     	
-        // Create GUI on EDT
-        final EnvGUI[] guiHolder = new EnvGUI[1];
-        SwingUtilities.invokeAndWait(() -> guiHolder[0] = new EnvGUI(controlSystem));
-        EnvGUI gui = guiHolder[0];  // safe reference
+    	// Create GUI on the EDT. Use AtomicReference so we can modify the reference inside lambda
+    	AtomicReference<EnvGUI> guiRef = new AtomicReference<>();
+    	SwingUtilities.invokeAndWait(() -> 
+    	    guiRef.set(new EnvGUI(controlSystem))
+    	);
+    	EnvGUI gui = guiRef.get();  // safe reference after invokeAndWait completes
 
-        // Start GUI updater thread
+
+        // Start GUI water level updater thread
         new Thread(() -> {
             while (true) {
                 try {
@@ -43,20 +47,15 @@ public class Simulator {
         controlSystem.setGui(gui);
         controlSystem.start();
         
-        // Wait max 20s for it to finish
-        //controlSystem.join();
-        controlSystem.join(50_000);
-
-        // If still running after 20s, stop it
+        // Run control system for 50s
+        controlSystem.join(20_000);
         if (controlSystem.isAlive()) {
-            controlSystem.interrupt();   // or controlSystem.shutdown() if you implemented it
+            controlSystem.interrupt();
         }
-    	
         controlSystem.join();
         
+        // Stop environment running
     	envUpdateTask.interrupt();
-    	
-    	System.out.printf("coReader max_exec_time:%f\n", envUpdateTask.getMaxExecTimeMs());
         
     }
 

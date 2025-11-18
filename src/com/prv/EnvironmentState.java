@@ -95,7 +95,7 @@ public class EnvironmentState {
         }
     }
 
-    // Dynamics update
+    // Move simulation forward for a small time period
     public void update(float dt_ms) {
     	timePassed_ms += dt_ms;
     	

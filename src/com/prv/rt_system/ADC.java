@@ -8,6 +8,7 @@ public class ADC {
         this.signalSource = signalSource;
     }
 
+    // device malfunctioning simulation
     public void brakeDownADCDevice() {
     	this.ADCworksProperly = false;
     }

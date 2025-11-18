@@ -21,7 +21,12 @@ public class PumpControlSubSys {
 		pumpController.start();
 		waterFlowMonitor.start();
 	}
-
+	
+	public void shutdown() {
+    	this.pumpController.shutdown();
+    	this.waterFlowMonitor.shutdown();
+    }
+    
     private boolean pumpIsOn = false; 
     
     private volatile boolean operatorSignalOn = false;
@@ -98,6 +103,7 @@ public class PumpControlSubSys {
     	EnvironmentState.getInstance().turnPumpOff();
     	gui.setPumpState(false);
     }
+    
     
 	int N = 0;
 	final int periodsToWait = 9;

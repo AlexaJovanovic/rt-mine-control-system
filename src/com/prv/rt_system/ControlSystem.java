@@ -41,7 +41,7 @@ public class ControlSystem extends Thread {
     public void run() {
         System.out.println("Control system started");
         
-        // sensor initialization
+        // sensor reading tasks initialization
         PeriodicTask coReader = new PeriodicTask(READER_TASK_PERIOD_MS, () -> this.coReaderTask(), 2);
         MCU.instance.adc1_co.startConversion();
         coReader.start();
@@ -58,12 +58,15 @@ public class ControlSystem extends Thread {
         MCU.instance.adc4_wf.startConversion();
         waterFlowReader.start();
         
+        // task that logs relevant information
         PeriodicTask loggerTask = new PeriodicTask(1000, this::loggerTask, 1);
         loggerTask.start();
        
         
+        // create pump controlling subsystem
         this.pumpControlSubSys = new PumpControlSubSys(this, gui);
         
+        // waiting for stoppage
         while (running) {
             try {
                 Thread.sleep(1000);
@@ -74,12 +77,17 @@ public class ControlSystem extends Thread {
             }
         }
         
-        coReader.interrupt();
-        ch4Reader.interrupt();
-        airFlowReader.interrupt();
-        waterFlowReader.interrupt();
-        loggerTask.interrupt();
+        // shutdown sensor tasks
+        coReader.shutdown();
+        ch4Reader.shutdown();
+        airFlowReader.shutdown();
+        waterFlowReader.shutdown();
+        loggerTask.shutdown();
         
+        // shutdown pump subsystem
+        this.pumpControlSubSys.shutdown();
+        
+        // extract maximum execution time and log it for scheduling tests 
         double pumpCtrlWCET = pumpControlSubSys.pumpController.getMaxExecTimeMs();
         double pumpMotiorWCET = pumpControlSubSys.waterFlowMonitor.getMaxExecTimeMs();
         
@@ -108,7 +116,6 @@ public class ControlSystem extends Thread {
     }
     
     // ALARMS MANAGING
-    
     private final Set<AlarmType> activeAlarms = new HashSet<>();
 
 	public void EXTIWaterLevelHigh() {
@@ -120,15 +127,13 @@ public class ControlSystem extends Thread {
 			this.pumpControlSubSys.setwaterLevelLowFlag();
 	}
     
- // Raise (or re-raise) an alarm
+	// Raise (or re-raise) an alarm
     public void soundAnAlarm(AlarmType type) {
         if (!activeAlarms.contains(type)) {
             activeAlarms.add(type);
             gui.log("⚠ ALARM RAISED: " + type);
             gui.showAlarm(type);
         }
-
-        // TODO: hook into real alarm system (sound buzzer, etc.)
     }
 
     // Clear/reset an alarm
@@ -143,6 +148,8 @@ public class ControlSystem extends Thread {
     public void pumpManualControlSignal(boolean pumpOn) {
     	this.pumpControlSubSys.setManualControl(pumpOn);
     }
+    
+    // Defining needed periodic tasks for sensor and logging functions
     
     private volatile ADCStatus prevCoReaderStatus = ADCStatus.DATA_READY;
     public void coReaderTask() {
@@ -247,6 +254,7 @@ public class ControlSystem extends Thread {
                 coConcentration, ch4Concentration, airFlow, waterFlow, EnvironmentState.getInstance().getWaterLevel());
     }
     
+    // read values from sensors
     private volatile float coConcentration = 0;
     private volatile float ch4Concentration = 0;
     private volatile float airFlow = 0;

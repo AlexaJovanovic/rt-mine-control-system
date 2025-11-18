@@ -69,7 +69,7 @@ public class EnvGUI {
 
         // Vertical progress bar (like a tank)
         waterLevelBar = new JProgressBar(SwingConstants.VERTICAL, 0, 100);
-        waterLevelBar.setValue(50); // placeholder for 50% water level
+        waterLevelBar.setValue(0); // placeholder for 0% water level
         waterLevelBar.setStringPainted(true);
 
         // Make the bar blue like water
@@ -129,10 +129,7 @@ public class EnvGUI {
         frame.add(bottomPanel, BorderLayout.SOUTH);
 
         frame.setVisible(true);
-        // ====== PLACEHOLDERS ======
-        // To update alarms: alarmLabel.setText("ALARM!"); alarmLabel.setBackground(Color.RED);
-        // To log: logArea.append("New log entry...\n");
-        // To update water level: waterLevelBar.setValue(x);
+
     }
     
     private void toggleADCButton(JButton button, String name, int adcNo) {
@@ -231,8 +228,6 @@ public class EnvGUI {
             }
         });
     }
-
-
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new EnvGUI(null));

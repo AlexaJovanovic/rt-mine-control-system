@@ -2,6 +2,8 @@ package com.prv.rt_system;
 
 import com.prv.EnvironmentState;
 
+
+// MCU abstraction encapsulating and simulating and wiring ADC devices
 public class MCU {
 	public static MCU instance = new MCU();   // singleton instance
 	
@@ -44,9 +46,5 @@ public class MCU {
     	}
     }
     
-	
-	public void EXTIWaterLevelHigh() {}
-	public void EXTIWaterLevelLow() {}
-	
 	private MCU() {}
 }
